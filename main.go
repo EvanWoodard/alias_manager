@@ -22,7 +22,7 @@ var (
 )
 
 func main() {
-	fmt.Println("Hi! I'm your alias manager, AL! Give me a moment to set things up!")
+	fmt.Println("Hi! I'm your alias manager. You can call me AL! Give me a moment to set things up!")
 
 	setupRC()
 	setupAliasFile()
