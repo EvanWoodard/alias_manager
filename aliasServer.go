@@ -15,7 +15,9 @@ type cliServer interface {
 	Shutdown(context.Context)
 }
 
-type aliasServer struct{}
+type aliasServer struct {
+	aliases map[string]string
+}
 
 func startAliasServer() cliServer {
 	aliasServer := aliasServer{}
@@ -31,6 +33,7 @@ func (a *aliasServer) Shutdown(ctx context.Context) {
 }
 
 func (a *aliasServer) Start() {
+	a.aliases = make(map[string]string)
 	go a.LoopInput()
 }
 
@@ -54,6 +57,10 @@ func (a *aliasServer) LoopInput() {
 			a.createAlias(name, fn)
 		case "list", "l":
 			a.listAliases()
+		case "remove", "r":
+			a.promptUser("Alias to remove:")
+			alias := a.readLine(r)
+			a.removeAlias(alias)
 		case "hi", "hello":
 			a.log("hello, Yourself")
 		}
@@ -72,34 +79,24 @@ func (a *aliasServer) readLine(r *bufio.Reader) string {
 func (a *aliasServer) createAlias(name, fn string) {
 	a.log(fmt.Sprintf("Creating your alias, sit tight! Alias: %s:%s", name, fn))
 
-	file, err := os.OpenFile(filepath.Join(aliasPath, zshAlias), os.O_APPEND|os.O_WRONLY, 0644)
-	if err != nil {
-		if os.IsNotExist(err) {
-			a.log("Alias file is missing, please restart the alias server to re-initialize it")
-			a.log("Shutting down...")
-			os.Exit(1)
-		}
-	}
-	defer file.Close()
-
-	_, err = file.WriteString(fmt.Sprintf("alias %s=\"%s\"\n", name, fn))
-	if err != nil {
-		a.log(err.Error())
-		return
-	}
-
-	cmd := exec.Command("bash", "-c", "source ~/.zsh/am/zsh_alias")
-	a.log("Re-sourcing your aliases, you should not have to restart your terminal to see it applied.")
-	err = cmd.Run()
-	if err != nil {
-		a.log("Something went wrong while sourcing aliases, your alias was saved, but not applied. Restart your terminal to use your new alias")
-		a.log(err.Error())
-	}
+	a.aliases[name] = fn
+	a.writeAliases()
 }
 
 func (a *aliasServer) listAliases() {
 	a.log("Listing Aliases")
+	a.checkAliases()
+	for cmd, fn := range a.aliases {
+		a.writeToUser(fmt.Sprintf("%s : %s", cmd, fn))
+	}
+}
 
+func (a *aliasServer) removeAlias(alias string) {
+	delete(a.aliases, alias)
+	a.writeAliases()
+}
+
+func (a *aliasServer) checkAliases() {
 	file, err := os.Open(filepath.Join(aliasPath, zshAlias))
 	if err != nil {
 		a.log("Could not find the alias list file. Restart the alias server to re-initialize it")
@@ -127,12 +124,57 @@ func (a *aliasServer) listAliases() {
 			cmd = strings.Replace(cmd, "\"", "", -1)
 			cmdList := strings.Split(cmd, "=")
 
-			a.writeToUser(fmt.Sprintf("%s : %s", cmdList[0], cmdList[1]))
+			a.aliases[cmdList[0]] = cmdList[1]
 		}
 	}
 
 	if err != io.EOF {
 		a.log(fmt.Sprintf("Failed!: %v\n", err))
+	}
+}
+
+func (a *aliasServer) writeAliases() {
+	aliasStr := ""
+	for cmd, fn := range a.aliases {
+		aliasStr += fmt.Sprintf("alias %s=\"%s\"\n", cmd, fn)
+	}
+
+	file, err := os.OpenFile(filepath.Join(aliasPath, zshAlias), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		if os.IsNotExist(err) {
+			a.log("Could not find the alias list file. Restart the alias server to re-initialize it")
+		}
+		return
+	}
+
+	a.log("Writing aliases to file")
+	_, err = file.WriteString(aliasStr)
+	if err != nil {
+		a.log(err.Error())
+	}
+
+	a.log("Getting terminal instances")
+	// grep := exec.Command("ps", "ax", "|", "grep", "/bin/zsh")
+	grep := exec.Command("grep", "zsh")
+	ps := exec.Command("ps", "ax")
+
+	psPipe, _ := ps.StdoutPipe()
+	defer psPipe.Close()
+	grep.Stdin = psPipe
+	ps.Start()
+
+	res, _ := grep.Output()
+
+	lines := strings.Split(strings.TrimSpace(string(res)), "\n")
+	var pids []string
+	for _, line := range lines {
+		lineArr := strings.Split(line, " ")
+		pids = append(pids, lineArr[0])
+	}
+
+	for _, pid := range pids {
+		usrCmd := exec.Command("kill", "-USR1", pid)
+		usrCmd.Start()
 	}
 }
 
