@@ -5,6 +5,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"io/ioutil"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -34,6 +36,8 @@ func (a *aliasServer) Shutdown(ctx context.Context) {
 
 func (a *aliasServer) Start() {
 	a.aliases = make(map[string]string)
+	a.setupAliasFile()
+	a.checkAliases()
 	go a.LoopInput()
 }
 
@@ -69,10 +73,8 @@ func (a *aliasServer) LoopInput() {
 
 func (a *aliasServer) readLine(r *bufio.Reader) string {
 	text, _ := r.ReadString('\n')
-	// convert CRLF to LF
-	text = strings.Replace(text, "\n", "", -1)
-	text = strings.Replace(text, "\"", "\\\"", -1)
 
+	text = strings.Replace(text, "\n", "", -1)
 	return text
 }
 
@@ -121,7 +123,8 @@ func (a *aliasServer) checkAliases() {
 		if line[:5] == "alias" {
 			cmd := line[6:]
 			cmd = strings.Replace(cmd, "\n", "", -1)
-			cmd = strings.Replace(cmd, "\"", "", -1)
+			cmd = strings.Replace(cmd, "\\\"", "\"", -1)
+			cmd = strings.Replace(cmd, "'", "", -1)
 			cmdList := strings.Split(cmd, "=")
 
 			a.aliases[cmdList[0]] = cmdList[1]
@@ -136,7 +139,7 @@ func (a *aliasServer) checkAliases() {
 func (a *aliasServer) writeAliases() {
 	aliasStr := ""
 	for cmd, fn := range a.aliases {
-		aliasStr += fmt.Sprintf("alias %s=\"%s\"\n", cmd, fn)
+		aliasStr += fmt.Sprintf("alias %s='%s'\n", cmd, fn)
 	}
 
 	file, err := os.OpenFile(filepath.Join(aliasPath, zshAlias), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
@@ -147,6 +150,11 @@ func (a *aliasServer) writeAliases() {
 		return
 	}
 
+	// This will clear the contents of the file by setting the filesize to 0
+	if err := file.Truncate(0); err != nil {
+		log.Printf("Failed to truncate: %v", err)
+	}
+
 	a.log("Writing aliases to file")
 	_, err = file.WriteString(aliasStr)
 	if err != nil {
@@ -155,10 +163,11 @@ func (a *aliasServer) writeAliases() {
 
 	a.log("Getting terminal instances")
 	// grep := exec.Command("ps", "ax", "|", "grep", "/bin/zsh")
-	grep := exec.Command("grep", "zsh")
+	grep := exec.Command("grep", "/bin/zsh \\| -zsh")
 	ps := exec.Command("ps", "ax")
 
 	psPipe, _ := ps.StdoutPipe()
+
 	defer psPipe.Close()
 	grep.Stdin = psPipe
 	ps.Start()
@@ -168,6 +177,10 @@ func (a *aliasServer) writeAliases() {
 	lines := strings.Split(strings.TrimSpace(string(res)), "\n")
 	var pids []string
 	for _, line := range lines {
+		if strings.Contains(line, "grep") {
+			continue
+		}
+		line = strings.TrimSpace(line)
 		lineArr := strings.Split(line, " ")
 		pids = append(pids, lineArr[0])
 	}
@@ -175,6 +188,43 @@ func (a *aliasServer) writeAliases() {
 	for _, pid := range pids {
 		usrCmd := exec.Command("kill", "-USR1", pid)
 		usrCmd.Start()
+	}
+}
+
+func (a *aliasServer) setupAliasFile() {
+	err := os.MkdirAll(aliasPath, os.ModePerm)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	_, err = os.OpenFile(filepath.Join(aliasPath, zshAlias), os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		if os.IsNotExist(err) {
+			file, err := os.Create(filepath.Join(aliasPath, zshAlias))
+			if err != nil {
+				fmt.Println("Uh-Oh, could not create a zsh_alias file...")
+				os.Exit(1)
+			}
+
+			a.writeDefaultAliases(file)
+		}
+	}
+}
+
+func (a *aliasServer) writeDefaultAliases(file *os.File) {
+	contents, err := ioutil.ReadFile(filepath.Join(aliasPath, zshAlias))
+	if err != nil {
+		fmt.Println(err)
+	}
+	if !strings.Contains(string(contents), defaultAliases) {
+		fmt.Println("Alias file does not contain default aliases, adding now...")
+		_, err = file.WriteString(defaultAliases)
+		if err != nil {
+			fmt.Println(err)
+		}
+	} else {
+		fmt.Println("Alias file already contains default aliases, skipping...")
 	}
 }
 

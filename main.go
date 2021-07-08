@@ -25,7 +25,6 @@ func main() {
 	fmt.Println("Hi! I'm your alias manager. You can call me AL! Give me a moment to set things up!")
 
 	setupRC()
-	setupAliasFile()
 
 	srv := startAliasServer()
 
@@ -75,38 +74,5 @@ func setupRC() {
 		}
 	} else {
 		fmt.Println(".zshrc file already contains alias import, skipping...")
-	}
-}
-
-func setupAliasFile() {
-	err := os.MkdirAll(aliasPath, os.ModePerm)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	_, err = os.OpenFile(filepath.Join(aliasPath, zshAlias), os.O_APPEND|os.O_WRONLY, 0644)
-	if err != nil {
-		if os.IsNotExist(err) {
-			file, err := os.Create(filepath.Join(aliasPath, zshAlias))
-			if err != nil {
-				fmt.Println("Uh-Oh, could not create a zsh_alias file...")
-				os.Exit(1)
-			}
-
-			contents, err := ioutil.ReadFile(filepath.Join(aliasPath, zshAlias))
-			if err != nil {
-				fmt.Println(err)
-			}
-			if !strings.Contains(string(contents), defaultAliases) {
-				fmt.Println("Alias file does not contain default aliases, adding now...")
-				_, err = file.WriteString(defaultAliases)
-				if err != nil {
-					fmt.Println(err)
-				}
-			} else {
-				fmt.Println("Alias file already contains default aliases, skipping...")
-			}
-		}
 	}
 }
