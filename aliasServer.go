@@ -160,9 +160,12 @@ func (a *aliasServer) writeAliases() {
 	if err != nil {
 		a.log(err.Error())
 	}
+	
+	a.updateAllRunningShells()
+}
 
+func (a *aliasServer) updateAllRunningShells() {
 	a.log("Getting terminal instances")
-	// grep := exec.Command("ps", "ax", "|", "grep", "/bin/zsh")
 	grep := exec.Command("grep", "/bin/zsh \\| -zsh")
 	ps := exec.Command("ps", "ax")
 
