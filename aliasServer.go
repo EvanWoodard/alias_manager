@@ -30,8 +30,8 @@ func startAliasServer() cliServer {
 }
 
 func (a *aliasServer) Shutdown(ctx context.Context) {
-	a.writeToUser("")
 	a.log("Shutting down...")
+	os.Exit(0)
 }
 
 func (a *aliasServer) Start() {
@@ -65,8 +65,17 @@ func (a *aliasServer) LoopInput() {
 			a.promptUser("Alias to remove:")
 			alias := a.readLine(r)
 			a.removeAlias(alias)
+		case "exit", "close", "q":
+			a.log("Bye")
+			a.Shutdown(nil)
 		case "hi", "hello":
 			a.log("hello, Yourself")
+		case "help", "h":
+			a.writeToUser("Commands:")
+			a.writeToUser("new (create, n): Creates new alias")
+			a.writeToUser("list (l): Lists created aliases")
+			a.writeToUser("remove (r): Removes alias")
+			a.writeToUser("exit (close, q): exit Al")
 		}
 	}
 }
