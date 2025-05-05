@@ -3,12 +3,12 @@ package main
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"strings"
-	"time"
+
+	"github.com/EvanWoodard/alias_manager/server"
 )
 
 const (
@@ -26,27 +26,27 @@ func main() {
 
 	setupRC()
 
-	srv := startAliasServer()
+	ctx, cancel := context.WithCancel(context.Background())
+
+	srv := server.New(aliasPath, zshAlias)
+
+	args := os.Args[1:]
+	if len(args) > 0 {
+		srv.RunCmd(ctx, args[0])
+		return
+	}
+	srv.Run(ctx)
 
 	c := make(chan os.Signal, 1)
 	// We'll accept graceful shutdowns when quit via SIGINT (Ctrl+C)
 	// SIGKILL, SIGQUIT or SIGTERM (Ctrl+/) will not be caught.
 	signal.Notify(c, os.Interrupt)
 
-	// Block until we receive our signal.
+		// Block until we receive our signal.
 	<-c
+	cancel()
 
-	// Create a deadline to wait for.
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
-	defer cancel()
-	// Doesn't block if no connections, but will otherwise wait
-	// until the timeout deadline.
-	srv.Shutdown(ctx)
-	// Optionally, you could run srv.Shutdown in a goroutine and block on
-	// <-ctx.Done() if your application should wait for other services
-	// to finalize based on context cancellation.
 	os.Exit(0)
-
 }
 
 func setupRC() {
@@ -62,7 +62,7 @@ func setupRC() {
 		}
 	}
 
-	contents, err := ioutil.ReadFile(z)
+	contents, err := os.ReadFile(z)
 	if err != nil {
 		fmt.Println(err)
 	}
