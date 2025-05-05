@@ -246,9 +246,9 @@ func (a *aliasServer) writeDefaultAliases(file *os.File) {
 	if err != nil {
 		fmt.Println(err)
 	}
-	if !strings.Contains(string(contents), defaultAliases) {
+	if !strings.Contains(string(contents), DefaultAliases) {
 		fmt.Println("Alias file does not contain default aliases, adding now...")
-		_, err = file.WriteString(defaultAliases)
+		_, err = file.WriteString(DefaultAliases)
 		if err != nil {
 			fmt.Println(err)
 		}

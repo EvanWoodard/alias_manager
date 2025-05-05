@@ -66,9 +66,9 @@ func setupRC() {
 	if err != nil {
 		fmt.Println(err)
 	}
-	if !strings.Contains(string(contents), importAlias) {
+	if !strings.Contains(string(contents), server.ImportAlias) {
 		fmt.Println(".zshrc file does not contain alias import, adding now...")
-		_, err = file.WriteString(importAlias)
+		_, err = file.WriteString(server.ImportAlias)
 		if err != nil {
 			fmt.Println(err)
 		}
